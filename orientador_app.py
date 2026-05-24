@@ -74,8 +74,55 @@ st.markdown(f"""
             margin: 0.4rem 0;
             border-radius: 4px;
         }}
+
+        /* ------- Botones de respuesta en cápsulas (estilo radio pill) ------- */
+        /* Streamlit envuelve cada radio en .stRadio. Aplicamos display horizontal
+           con flex-wrap y le damos a cada opción la apariencia de cápsula. */
+        div[data-testid="stRadio"] > div {{
+            flex-direction: row !important;
+            flex-wrap: wrap !important;
+            gap: 8px !important;
+        }}
+        div[data-testid="stRadio"] label {{
+            background: #FFFFFF !important;
+            border: 1px solid #D6D3DC !important;
+            border-radius: 100px !important;
+            padding: 8px 16px !important;
+            margin: 0 !important;
+            cursor: pointer !important;
+            transition: all 0.18s ease !important;
+            font-size: 0.92rem !important;
+            color: #333 !important;
+        }}
+        div[data-testid="stRadio"] label:hover {{
+            border-color: {PALETA['primario']} !important;
+            background: {PALETA['fondo_claro']} !important;
+        }}
+        /* Cuando el radio interno está marcado, oscurecemos toda la cápsula */
+        div[data-testid="stRadio"] label:has(input:checked) {{
+            background: #1A1626 !important;
+            color: #FFFFFF !important;
+            border-color: #1A1626 !important;
+        }}
+        div[data-testid="stRadio"] label:has(input:checked) p {{
+            color: #FFFFFF !important;
+        }}
+        /* Etiqueta de cada pregunta más prolija */
+        div[data-testid="stRadio"] > label {{
+            font-weight: 500 !important;
+            margin-bottom: 4px !important;
+        }}
     </style>
 """, unsafe_allow_html=True)
+
+
+# =============================================================================
+# Control de navegación entre pantallas
+# =============================================================================
+# Streamlit usa session_state para mantener variables entre interacciones.
+# La variable 'pantalla' nos dice si mostramos la bienvenida o el test.
+if "pantalla" not in st.session_state:
+    st.session_state.pantalla = "bienvenida"
 
 
 # =============================================================================
@@ -116,6 +163,55 @@ with st.sidebar:
 
 
 # =============================================================================
+# PANTALLA 1 — Bienvenida
+# =============================================================================
+
+if st.session_state.pantalla == "bienvenida":
+
+    st.markdown("## Test Vocacional")
+    st.caption("Sistema Experto")
+
+    st.markdown(
+        "#### Este breve test te ayudará a elegir tu carrera ideal."
+    )
+
+    st.divider()
+
+    st.write(
+        "Este sistema analiza tus **intereses personales** basándose en el "
+        "**Modelo de Holland (RIASEC)**, una referencia mundial en orientación "
+        "vocacional, y cruza tu perfil con un diccionario de carreras "
+        "universitarias argentinas derivado del estándar internacional **O*NET**."
+    )
+
+    st.markdown("**Cómo funciona:**")
+    st.markdown("""
+    1. Respondés un test corto de **30 preguntas** en escala de 1 a 5.
+    2. Nuestro algoritmo traza tu **perfil vocacional** y calcula
+       matemáticamente el porcentaje de coincidencia con los requisitos
+       de cada carrera.
+    3. Recibís un **ranking de afinidad** y un análisis visual de tu perfil.
+    """)
+
+    st.info("**Privacidad:** tus respuestas viven sólo en esta sesión. "
+            "Nada se guarda ni se envía a servidores externos.",
+            icon="🔒")
+
+    st.write("")  # un poco de aire vertical
+
+    # Botón para pasar al test
+    centro = st.columns([1, 2, 1])[1]
+    with centro:
+        if st.button("Comenzar →", use_container_width=True, type="primary"):
+            st.session_state.pantalla = "test"
+            st.rerun()
+
+    # Cortamos la ejecución acá: el resto del archivo no se ejecuta
+    # mientras estemos en la pantalla de bienvenida.
+    st.stop()
+
+
+# =============================================================================
 # Cuerpo principal — Test de 30 preguntas
 # =============================================================================
 
@@ -123,14 +219,25 @@ st.markdown("### 📋 Test vocacional")
 st.write("Respondé las siguientes 30 afirmaciones según cuánto te identifican. "
          "El test es anónimo y demora aproximadamente 5 minutos.")
 
-st.info("**Escala:** 1 = Totalmente en desacuerdo · "
-        "2 = En desacuerdo · 3 = Neutral · "
-        "4 = De acuerdo · 5 = Totalmente de acuerdo",
+st.info("**Escala:** 1 = Lo detestaría · "
+        "2 = No me gustaría · 3 = Me da igual · "
+        "4 = Me gustaría · 5 = Me encantaría",
         icon="📊")
 
-# Estado: respuestas
+# Mapa de valor numérico (1-5) a etiqueta descriptiva (lo que el usuario ve)
+OPCIONES_RESPUESTA = {
+    1: "1 · Lo detestaría",
+    2: "2 · No me gustaría",
+    3: "3 · Me da igual",
+    4: "4 · Me gustaría",
+    5: "5 · Me encantaría",
+}
+# Lista de etiquetas en orden, para alimentar a st.radio
+ETIQUETAS_RESPUESTA = list(OPCIONES_RESPUESTA.values())
+
+# Estado: respuestas (guardamos los valores numéricos 1-5)
 if "respuestas" not in st.session_state:
-    st.session_state.respuestas = [3] * 30   # default neutral
+    st.session_state.respuestas = [3] * 30   # default: "Me da igual"
 
 # Mostrar preguntas en dos columnas para que no sea un scroll infinito
 col_izq, col_der = st.columns(2)
@@ -138,12 +245,19 @@ col_izq, col_der = st.columns(2)
 for idx, (texto, dim) in enumerate(PREGUNTAS):
     columna = col_izq if idx % 2 == 0 else col_der
     with columna:
-        st.session_state.respuestas[idx] = st.select_slider(
+        # st.radio devuelve la etiqueta seleccionada (ej. "3 · Me da igual").
+        # Convertimos esa etiqueta de vuelta al número 1-5 buscando en el dict.
+        seleccion_texto = st.radio(
             f"**{idx + 1}.** {texto}",
-            options=[1, 2, 3, 4, 5],
-            value=st.session_state.respuestas[idx],
+            options=ETIQUETAS_RESPUESTA,
+            index=st.session_state.respuestas[idx] - 1,  # default acorde al valor previo
             key=f"q_{idx}",
+            horizontal=False,    # el CSS los acomoda en fila vía flex-wrap
+            label_visibility="visible",
         )
+        # Extraemos el número (primer carácter de la etiqueta) y lo guardamos
+        valor_numerico = int(seleccion_texto.split(" · ")[0])
+        st.session_state.respuestas[idx] = valor_numerico
 
 st.divider()
 
