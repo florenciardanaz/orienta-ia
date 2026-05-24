@@ -75,42 +75,78 @@ st.markdown(f"""
             border-radius: 4px;
         }}
 
+        /* ------- Forzar fondo blanco para que las cápsulas se vean bien ------- */
+        /* Streamlit aplica tema oscuro automáticamente en algunos navegadores,
+           lo cual hace que las cápsulas blancas se "pierdan". Forzamos tema claro
+           para todo el contenido principal. */
+        .stApp {{
+            background: #FFFFFF !important;
+        }}
+        .stApp, .stApp p, .stApp label, .stApp span, .stApp h1,
+        .stApp h2, .stApp h3, .stApp h4, .stApp li {{
+            color: #1A1626 !important;
+        }}
+
         /* ------- Botones de respuesta en cápsulas (estilo radio pill) ------- */
         /* Streamlit envuelve cada radio en .stRadio. Aplicamos display horizontal
            con flex-wrap y le damos a cada opción la apariencia de cápsula. */
         div[data-testid="stRadio"] > div {{
             flex-direction: row !important;
             flex-wrap: wrap !important;
-            gap: 8px !important;
+            gap: 10px !important;
+            background: transparent !important;
         }}
+        /* Cápsula por defecto: fondo blanco, borde gris, texto negro */
         div[data-testid="stRadio"] label {{
             background: #FFFFFF !important;
             border: 1px solid #D6D3DC !important;
             border-radius: 100px !important;
-            padding: 8px 16px !important;
+            padding: 8px 18px !important;
             margin: 0 !important;
             cursor: pointer !important;
             transition: all 0.18s ease !important;
             font-size: 0.92rem !important;
-            color: #333 !important;
+            color: #1A1626 !important;
         }}
+        /* Forzamos color de texto negro en TODOS los elementos internos */
+        div[data-testid="stRadio"] label p,
+        div[data-testid="stRadio"] label span,
+        div[data-testid="stRadio"] label div {{
+            color: #1A1626 !important;
+            background: transparent !important;
+        }}
+        /* Hover: solo cambia el borde para feedback sutil */
         div[data-testid="stRadio"] label:hover {{
             border-color: {PALETA['primario']} !important;
-            background: {PALETA['fondo_claro']} !important;
         }}
-        /* Cuando el radio interno está marcado, oscurecemos toda la cápsula */
+        /* Cápsula SELECCIONADA: fondo negro, texto blanco */
         div[data-testid="stRadio"] label:has(input:checked) {{
             background: #1A1626 !important;
-            color: #FFFFFF !important;
             border-color: #1A1626 !important;
         }}
-        div[data-testid="stRadio"] label:has(input:checked) p {{
+        div[data-testid="stRadio"] label:has(input:checked) p,
+        div[data-testid="stRadio"] label:has(input:checked) span,
+        div[data-testid="stRadio"] label:has(input:checked) div {{
             color: #FFFFFF !important;
         }}
-        /* Etiqueta de cada pregunta más prolija */
+        /* Bullet (circulito) de la cápsula seleccionada en blanco */
+        div[data-testid="stRadio"] label:has(input:checked) [data-baseweb="radio"] > div:first-child {{
+            border-color: #FFFFFF !important;
+        }}
+
+        /* Título de cada pregunta */
         div[data-testid="stRadio"] > label {{
-            font-weight: 500 !important;
-            margin-bottom: 4px !important;
+            font-weight: 600 !important;
+            font-size: 1rem !important;
+            margin-bottom: 8px !important;
+            color: #1A1626 !important;
+            background: transparent !important;
+        }}
+
+        /* Espaciado entre preguntas */
+        .pregunta-bloque {{
+            padding: 18px 0;
+            border-bottom: 1px solid #ECE9F0;
         }}
     </style>
 """, unsafe_allow_html=True)
@@ -235,40 +271,80 @@ OPCIONES_RESPUESTA = {
 # Lista de etiquetas en orden, para alimentar a st.radio
 ETIQUETAS_RESPUESTA = list(OPCIONES_RESPUESTA.values())
 
-# Estado: respuestas (guardamos los valores numéricos 1-5)
+# Estado: respuestas. Inicializamos en None para que NINGUNA opción
+# venga preseleccionada — el usuario tiene que elegir activamente.
 if "respuestas" not in st.session_state:
-    st.session_state.respuestas = [3] * 30   # default: "Me da igual"
+    st.session_state.respuestas = [None] * 30
 
-# Mostrar preguntas en dos columnas para que no sea un scroll infinito
-col_izq, col_der = st.columns(2)
-
+# Mostrar preguntas una debajo de la otra, en una sola columna
 for idx, (texto, dim) in enumerate(PREGUNTAS):
-    columna = col_izq if idx % 2 == 0 else col_der
-    with columna:
-        # st.radio devuelve la etiqueta seleccionada (ej. "3 · Me da igual").
-        # Convertimos esa etiqueta de vuelta al número 1-5 buscando en el dict.
-        seleccion_texto = st.radio(
-            f"**{idx + 1}.** {texto}",
-            options=ETIQUETAS_RESPUESTA,
-            index=st.session_state.respuestas[idx] - 1,  # default acorde al valor previo
-            key=f"q_{idx}",
-            horizontal=False,    # el CSS los acomoda en fila vía flex-wrap
-            label_visibility="visible",
-        )
-        # Extraemos el número (primer carácter de la etiqueta) y lo guardamos
-        valor_numerico = int(seleccion_texto.split(" · ")[0])
-        st.session_state.respuestas[idx] = valor_numerico
+    # Cada pregunta es un bloque con divisor inferior
+    st.markdown('<div class="pregunta-bloque">', unsafe_allow_html=True)
+
+    # Determinamos el índice por defecto:
+    #   - None  → ninguna opción marcada (parámetro index=None de st.radio)
+    #   - valor → la opción ya elegida
+    valor_prev = st.session_state.respuestas[idx]
+    if valor_prev is None:
+        index_default = None
+    else:
+        index_default = valor_prev - 1
+
+    seleccion_texto = st.radio(
+        f"**{idx + 1}.** {texto}",
+        options=ETIQUETAS_RESPUESTA,
+        index=index_default,
+        key=f"q_{idx}",
+        horizontal=False,        # el CSS los acomoda en fila vía flex-wrap
+        label_visibility="visible",
+    )
+
+    # Guardamos el valor numérico si el usuario eligió algo
+    if seleccion_texto is not None:
+        st.session_state.respuestas[idx] = int(seleccion_texto.split(" · ")[0])
+
+    st.markdown('</div>', unsafe_allow_html=True)
 
 st.divider()
 
 # =============================================================================
-# Botón de ejecución
+# Botones de acción: Cancelar test + Obtener recomendación
 # =============================================================================
 
-centro = st.columns([1, 2, 1])[1]
-with centro:
+# Mostramos lado a lado los dos botones de acción.
+# Usamos columnas para que queden bien distribuidos.
+col_cancelar, col_ejecutar = st.columns([1, 2])
+
+with col_cancelar:
+    if st.button("← Cancelar test",
+                 use_container_width=True):
+        # Limpiamos las respuestas y volvemos a la pantalla de bienvenida
+        st.session_state.respuestas = [None] * 30
+        # Borramos también los radios individuales para que aparezcan vacíos
+        for i in range(30):
+            if f"q_{i}" in st.session_state:
+                del st.session_state[f"q_{i}"]
+        st.session_state.pantalla = "bienvenida"
+        st.rerun()
+
+with col_ejecutar:
     ejecutar = st.button("🔍 Obtener mi recomendación vocacional",
                          use_container_width=True, type="primary")
+
+# Validamos que TODAS las preguntas hayan sido respondidas antes de ejecutar.
+# Si falta alguna, mostramos un aviso y NO disparamos el motor.
+if ejecutar:
+    faltantes = [i + 1 for i, r in enumerate(st.session_state.respuestas)
+                 if r is None]
+    if faltantes:
+        st.warning(
+            f"⚠️ Te faltan {len(faltantes)} pregunta(s) por responder: "
+            f"{', '.join(str(n) for n in faltantes[:10])}"
+            + ("..." if len(faltantes) > 10 else ""),
+            icon="📝"
+        )
+        # Forzamos que no se ejecute el motor
+        ejecutar = False
 
 
 # =============================================================================
