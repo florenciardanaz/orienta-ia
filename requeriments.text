@@ -1,0 +1,5 @@
+experta==1.9.4
+frozendict==1.2
+streamlit
+plotly
+pandas
